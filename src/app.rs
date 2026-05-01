@@ -24,6 +24,7 @@ pub enum CommandResult {
     Quit,
     SaveQuit,
     ForceQuit,
+    GotoLine(usize),
     Unknown(String),
 }
 
@@ -338,11 +339,17 @@ impl App {
         self.command_buffer.clear();
         self.mode = Mode::Normal;
         match cmd.as_str() {
-            "w"       => CommandResult::Save,
-            "q"       => CommandResult::Quit,
+            "w"        => CommandResult::Save,
+            "q"        => CommandResult::Quit,
             "wq" | "x" => CommandResult::SaveQuit,
-            "q!"      => CommandResult::ForceQuit,
-            other     => CommandResult::Unknown(other.to_owned()),
+            "q!"       => CommandResult::ForceQuit,
+            other => {
+                if let Ok(n) = other.parse::<usize>() {
+                    CommandResult::GotoLine(n)
+                } else {
+                    CommandResult::Unknown(other.to_owned())
+                }
+            }
         }
     }
 
@@ -749,6 +756,22 @@ mod tests {
         app.enter_command();
         app.command_buffer = "q!".into();
         assert_eq!(app.execute_command(), CommandResult::ForceQuit);
+    }
+
+    #[test]
+    fn execute_number_returns_goto_line() {
+        let mut app = make_app(5, 3);
+        app.enter_command();
+        app.command_buffer = "3".into();
+        assert_eq!(app.execute_command(), CommandResult::GotoLine(3));
+    }
+
+    #[test]
+    fn execute_zero_returns_goto_line_zero() {
+        let mut app = make_app(5, 3);
+        app.enter_command();
+        app.command_buffer = "0".into();
+        assert_eq!(app.execute_command(), CommandResult::GotoLine(0));
     }
 
     // ── Busca ─────────────────────────────────────────────────────────────────

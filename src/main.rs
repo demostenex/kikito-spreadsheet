@@ -153,8 +153,14 @@ fn handle_command(app: &mut App, ev: AppEvent, path: &Path) -> Result<(), AppErr
                 CommandResult::ForceQuit => {
                     app.should_quit = true;
                 }
+                CommandResult::GotoLine(n) => {
+                    let max = app.current_sheet().row_count().saturating_sub(1);
+                    // linha 1-indexada igual ao contador "Ln x/y" da status bar
+                    app.cursor_row = n.saturating_sub(1).min(max);
+                    app.status_msg = Some(format!("Linha {}", n));
+                }
                 CommandResult::Unknown(cmd) => {
-                    app.status_msg = Some(format!("Comando desconhecido: {}", cmd));
+                    app.status_msg = Some(format!("Comando desconhecido: :{}", cmd));
                 }
                 CommandResult::None => {}
             }
