@@ -96,4 +96,48 @@ test result: ok. 49 passed; 0 failed; 0 ignored
 - Loop principal em `src/main.rs` com crossterm raw mode
 - Meta: binário funcional e navegável no terminal
 
+---
+
+## 2026-05-01 — Milestone 4 concluído: UI funcional + publicação no GitHub
+
+**Milestone:** M4
+**Status:** Concluído
+
+### O que foi feito
+- `src/ui.rs` implementado com ratatui:
+  - Header com nome do arquivo e tabs de sheets (sheet ativa destacada)
+  - Tabela com scroll virtual (só renderiza linhas visíveis)
+  - Largura de coluna calculada automaticamente por amostra de 50 linhas
+  - Highlight de linha: `CURSOR_ROW_BG` (azul escuro)
+  - Highlight de célula ativa: `ACTIVE_CELL_BG` (amarelo ouro, texto escuro) — contraste total com a linha
+  - Highlight de resultados de busca: amarelo sobre linha
+  - Status bar: `Ln x/y | Col x/y | NomeColuna › valor` — referência exata da célula atual
+  - Help overlay com todos os atalhos (tecla `?`)
+- `src/main.rs` com loop principal crossterm (raw mode, alternate screen)
+- Testado com `DADOS - TELEFONE.xlsx`: 2519 linhas × 14 colunas, acentos, datas, CPFs
+- Publicado no GitHub: https://github.com/demostenex/kikito-spreadsheet
+- Arquivo `tests/fixtures/telefone.xlsx` bloqueado no `.gitignore` — nenhum dado pessoal subiu
+
+### Decisões tomadas
+- `CURSOR_ROW_BG` e `ACTIVE_CELL_BG` separados: a linha e a célula precisam de cores distintas para o highlight de célula ser visível
+- Row style do ratatui sobrescreve cell style se forem a mesma cor — solução: cores diferentes nas duas constantes
+- Borrow checker: `sync_offsets` (mutável) deve ser chamado antes de `current_sheet()` (imutável) na função `draw_table`
+- Fixtures pessoais ignorados via `.gitignore` glob: `tests/fixtures/*.xlsx`
+
+### Problemas encontrados
+- `assert_fs` puxava `globset 0.4.18` que exige edition2024 (Rust < 1.85 não suporta) — removido, `tempfile` suficiente
+- `DataType` no calamine 0.26 é trait; enum correto é `Data` — corrigido
+- `ExcelDateTime` não é `f64`; usar `.as_f64()` — corrigido
+- `open_workbook` precisa de tipo explícito no `map_err` (ex: `XlsxError`) — corrigido
+- Rust atualizado de 1.79 → 1.95 para suportar dependências transitivas com edition2024
+
+### Próxima sessão (Milestone 5 — Edição estilo Vim)
+- Adicionar `rust_xlsxwriter` ao Cargo.toml
+- Implementar pending key buffer para sequências (`gg`, `dd`, `yy`)
+- Modo Insert: buffer de edição com cursor visual na célula
+- Modo Command: `:w`, `:q`, `:wq`, `:q!`
+- Operações: `o/O` (nova linha), `dd` (deletar), `yy/p/P` (copiar/colar), `x` (limpar), `u/Ctrl+R` (undo/redo)
+- Escritores: `CsvWriter`, `XlsxWriter`
+- Indicador `[+]` no header quando arquivo modificado
+
 <!-- Entradas futuras serão adicionadas abaixo -->
