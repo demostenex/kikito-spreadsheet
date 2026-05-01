@@ -50,6 +50,33 @@ impl Sheet {
             .and_then(|r| r.get(col))
             .unwrap_or(&Cell::Empty)
     }
+
+    pub fn set_cell(&mut self, row: usize, col: usize, cell: Cell) {
+        if let Some(r) = self.rows.get_mut(row) {
+            if col < r.len() {
+                r[col] = cell;
+            }
+        }
+    }
+
+    pub fn delete_row(&mut self, row: usize) -> Option<Vec<Cell>> {
+        if row < self.rows.len() {
+            Some(self.rows.remove(row))
+        } else {
+            None
+        }
+    }
+
+    pub fn insert_row(&mut self, row: usize, cells: Vec<Cell>) {
+        let col_count = self.col_count();
+        let mut padded = cells;
+        while padded.len() < col_count { padded.push(Cell::Empty); }
+        self.rows.insert(row.min(self.rows.len()), padded);
+    }
+
+    pub fn empty_row(&self) -> Vec<Cell> {
+        vec![Cell::Empty; self.col_count()]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -184,5 +211,50 @@ mod tests {
     #[test]
     fn tabledata_file_path_stored() {
         assert_eq!(sample_table().file_path, "file.xlsx");
+    }
+
+    // --- Sheet mutação ---
+
+    #[test]
+    fn set_cell_updates_value() {
+        let mut s = sample_sheet();
+        s.set_cell(1, 0, Cell::Text("Zed".into()));
+        assert_eq!(s.get(1, 0), &Cell::Text("Zed".into()));
+    }
+
+    #[test]
+    fn set_cell_out_of_bounds_does_nothing() {
+        let mut s = sample_sheet();
+        s.set_cell(99, 99, Cell::Number(1.0));
+        assert_eq!(s.row_count(), 3);
+    }
+
+    #[test]
+    fn delete_row_removes_row() {
+        let mut s = sample_sheet();
+        s.delete_row(1);
+        assert_eq!(s.row_count(), 2);
+        assert_eq!(s.get(1, 0), &Cell::Text("Bob".into()));
+    }
+
+    #[test]
+    fn delete_row_returns_cells() {
+        let mut s = sample_sheet();
+        let removed = s.delete_row(1).unwrap();
+        assert_eq!(removed[0], Cell::Text("Alice".into()));
+    }
+
+    #[test]
+    fn insert_row_adds_at_position() {
+        let mut s = sample_sheet();
+        s.insert_row(1, vec![Cell::Text("Zed".into()), Cell::Number(99.0)]);
+        assert_eq!(s.row_count(), 4);
+        assert_eq!(s.get(1, 0), &Cell::Text("Zed".into()));
+    }
+
+    #[test]
+    fn empty_row_has_correct_col_count() {
+        let s = sample_sheet();
+        assert_eq!(s.empty_row().len(), s.col_count());
     }
 }

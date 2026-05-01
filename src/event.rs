@@ -9,19 +9,21 @@ pub enum AppEvent {
     ScrollUp,
     ScrollLeft,
     ScrollRight,
-    GotoFirstRow,
-    GotoLastRow,
     GotoFirstCol,
     GotoLastCol,
+    GotoLastRow,
     NextSheet,
     PrevSheet,
     EnterSearch,
     SearchNext,
     SearchPrev,
-    ExitSearch,
+    ExitMode,       // Esc — sai de Insert / Search / Command / Help
+    Enter,
     Char(char),
     Backspace,
     ToggleHelp,
+    CtrlS,          // salvar atalho
+    CtrlR,          // redo
     Resize,
 }
 
@@ -37,27 +39,31 @@ pub fn poll_event(timeout_ms: u64) -> Result<Option<AppEvent>, AppError> {
 }
 
 fn map_key(code: KeyCode, modifiers: KeyModifiers) -> AppEvent {
+    let ctrl = modifiers.contains(KeyModifiers::CONTROL);
+
     match code {
-        KeyCode::Char('q') | KeyCode::Char('c')
-            if modifiers.contains(KeyModifiers::CONTROL) => AppEvent::Quit,
-        KeyCode::Char('q')                => AppEvent::Quit,
+        KeyCode::Char('c') if ctrl => AppEvent::Quit,
+        KeyCode::Char('s') if ctrl => AppEvent::CtrlS,
+        KeyCode::Char('r') if ctrl => AppEvent::CtrlR,
+
+        KeyCode::Char('q')                 => AppEvent::Quit,
         KeyCode::Char('j') | KeyCode::Down  => AppEvent::ScrollDown,
         KeyCode::Char('k') | KeyCode::Up    => AppEvent::ScrollUp,
         KeyCode::Char('h') | KeyCode::Left  => AppEvent::ScrollLeft,
         KeyCode::Char('l') | KeyCode::Right => AppEvent::ScrollRight,
-        KeyCode::Char('g')                => AppEvent::GotoFirstRow,
-        KeyCode::Char('G')                => AppEvent::GotoLastRow,
-        KeyCode::Char('0')                => AppEvent::GotoFirstCol,
-        KeyCode::Char('$')                => AppEvent::GotoLastCol,
-        KeyCode::Tab                      => AppEvent::NextSheet,
-        KeyCode::BackTab                  => AppEvent::PrevSheet,
-        KeyCode::Char('/')                => AppEvent::EnterSearch,
-        KeyCode::Char('n')                => AppEvent::SearchNext,
-        KeyCode::Char('N')                => AppEvent::SearchPrev,
-        KeyCode::Esc                      => AppEvent::ExitSearch,
-        KeyCode::Char('?')                => AppEvent::ToggleHelp,
-        KeyCode::Backspace                => AppEvent::Backspace,
-        KeyCode::Char(c)                  => AppEvent::Char(c),
-        _                                 => AppEvent::Char('\0'),
+        KeyCode::Char('0')                 => AppEvent::GotoFirstCol,
+        KeyCode::Char('$')                 => AppEvent::GotoLastCol,
+        KeyCode::Char('G')                 => AppEvent::GotoLastRow,
+        KeyCode::Tab                       => AppEvent::NextSheet,
+        KeyCode::BackTab                   => AppEvent::PrevSheet,
+        KeyCode::Char('/')                 => AppEvent::EnterSearch,
+        KeyCode::Char('n')                 => AppEvent::SearchNext,
+        KeyCode::Char('N')                 => AppEvent::SearchPrev,
+        KeyCode::Esc                       => AppEvent::ExitMode,
+        KeyCode::Enter                     => AppEvent::Enter,
+        KeyCode::Char('?')                 => AppEvent::ToggleHelp,
+        KeyCode::Backspace                 => AppEvent::Backspace,
+        KeyCode::Char(c)                   => AppEvent::Char(c),
+        _                                  => AppEvent::Char('\0'),
     }
 }

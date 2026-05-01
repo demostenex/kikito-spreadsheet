@@ -7,17 +7,23 @@ use ratatui::{
 };
 use crate::app::{App, Mode};
 
-const HEADER_BG: Color    = Color::Rgb(30, 30, 60);
-const HEADER_FG: Color    = Color::Rgb(180, 180, 255);
-const CURSOR_ROW_BG: Color = Color::Rgb(45, 75, 130);   // linha selecionada
-const ACTIVE_CELL_BG: Color = Color::Rgb(255, 215, 0);  // célula ativa (amarelo ouro)
-const ACTIVE_CELL_FG: Color = Color::Rgb(10, 10, 10);   // texto escuro na célula ativa
-const EVEN_BG: Color      = Color::Rgb(18, 18, 28);
-const ODD_BG: Color       = Color::Rgb(24, 24, 38);
-const STATUS_BG: Color    = Color::Rgb(40, 40, 80);
-const SEARCH_BG: Color    = Color::Rgb(60, 40, 0);
-const MATCH_FG: Color     = Color::Rgb(255, 200, 0);
-const BORDER_FG: Color    = Color::Rgb(80, 80, 120);
+const HEADER_BG: Color      = Color::Rgb(30, 30, 60);
+const HEADER_FG: Color      = Color::Rgb(180, 180, 255);
+const CURSOR_ROW_BG: Color  = Color::Rgb(45, 75, 130);
+const ACTIVE_CELL_BG: Color = Color::Rgb(255, 215, 0);
+const ACTIVE_CELL_FG: Color = Color::Rgb(10, 10, 10);
+const INSERT_CELL_BG: Color = Color::Rgb(0, 180, 100);
+const INSERT_CELL_FG: Color = Color::Rgb(0, 0, 0);
+const EVEN_BG: Color        = Color::Rgb(18, 18, 28);
+const ODD_BG: Color         = Color::Rgb(24, 24, 38);
+const STATUS_BG: Color      = Color::Rgb(40, 40, 80);
+const SEARCH_BG: Color      = Color::Rgb(60, 40, 0);
+const COMMAND_BG: Color     = Color::Rgb(20, 20, 20);
+const MATCH_FG: Color       = Color::Rgb(255, 200, 0);
+const BORDER_FG: Color      = Color::Rgb(80, 80, 120);
+const DIRTY_FG: Color       = Color::Rgb(255, 100, 80);
+const INSERT_FG: Color      = Color::Rgb(0, 220, 120);
+const NORMAL_FG: Color      = Color::Rgb(120, 120, 180);
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
@@ -25,9 +31,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),  // header
-            Constraint::Min(0),     // table
-            Constraint::Length(1),  // status / search bar
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
         ])
         .split(area);
 
@@ -40,7 +46,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
-// ── Header ──────────────────────────────────────────────────────────────────
+// ── Header ────────────────────────────────────────────────────────────────────
 
 fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     let file = std::path::Path::new(&app.data.file_path)
@@ -48,20 +54,20 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         .and_then(|n| n.to_str())
         .unwrap_or(&app.data.file_path);
 
+    let dirty_indicator = if app.dirty {
+        Span::styled(" [+]", Style::default().fg(DIRTY_FG).bg(HEADER_BG).add_modifier(Modifier::BOLD))
+    } else {
+        Span::styled("    ", Style::default().bg(HEADER_BG))
+    };
+
     let sheet_tabs: Vec<Span> = app.data.sheets.iter().enumerate().map(|(i, s)| {
         if i == app.active_sheet {
             Span::styled(
                 format!(" {} ", s.name),
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Rgb(140, 180, 255))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Black).bg(Color::Rgb(140, 180, 255)).add_modifier(Modifier::BOLD),
             )
         } else {
-            Span::styled(
-                format!(" {} ", s.name),
-                Style::default().fg(BORDER_FG).bg(HEADER_BG),
-            )
+            Span::styled(format!(" {} ", s.name), Style::default().fg(BORDER_FG).bg(HEADER_BG))
         }
     }).collect();
 
@@ -70,81 +76,87 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
             format!(" 📊 {} ", file),
             Style::default().fg(HEADER_FG).bg(HEADER_BG).add_modifier(Modifier::BOLD),
         ),
+        dirty_indicator,
         Span::styled("  │  ", Style::default().fg(BORDER_FG).bg(HEADER_BG)),
     ];
     spans.extend(sheet_tabs);
 
-    let header = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(HEADER_BG));
-    frame.render_widget(header, area);
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(HEADER_BG)),
+        area,
+    );
 }
 
-// ── Table ───────────────────────────────────────────────────────────────────
+// ── Table ─────────────────────────────────────────────────────────────────────
 
 fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
     let visible_h = area.height.saturating_sub(3) as usize;
     let visible_w = area.width.saturating_sub(2) as usize;
 
-    // compute widths and sync offsets before immutable borrow of sheet
     let col_widths = compute_col_widths(app, visible_w);
     sync_offsets(app, visible_h, &col_widths, visible_w);
 
     let col_offset = app.col_offset;
     let row_offset = app.row_offset;
+    let in_insert  = app.mode == Mode::Insert;
 
     let sheet = app.current_sheet();
     if sheet.row_count() == 0 {
-        let empty = Paragraph::new("(arquivo vazio)")
-            .style(Style::default().fg(BORDER_FG))
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(BORDER_FG)));
-        frame.render_widget(empty, area);
+        frame.render_widget(
+            Paragraph::new("(arquivo vazio)")
+                .style(Style::default().fg(BORDER_FG))
+                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(BORDER_FG))),
+            area,
+        );
         return;
     }
 
-    let col_count = sheet.col_count();
-    let row_count = sheet.row_count();
+    let col_count  = sheet.col_count();
+    let row_count  = sheet.row_count();
+    let cursor_row = app.cursor_row;
+    let cursor_col = app.cursor_col;
+    let edit_buf   = app.edit_buffer.clone();
+    let search_q   = app.search_query.clone();
 
-    // header row (row 0)
+    // header row (linha 0)
     let header_cells: Vec<RCell> = (col_offset..col_count)
         .map(|c| {
-            let txt = sheet.get(0, c).to_string();
+            let txt   = sheet.get(0, c).to_string();
             let width = col_widths.get(c).copied().unwrap_or(10) as usize;
             RCell::from(truncate(&txt, width))
                 .style(Style::default().fg(HEADER_FG).bg(HEADER_BG).add_modifier(Modifier::BOLD))
         })
         .collect();
 
-    let header_row = Row::new(header_cells).height(1);
-
-    // data rows (skip row 0 which is header)
     let data_start = if row_count > 1 { 1 } else { 0 };
+
     let rows: Vec<Row> = (data_start..row_count)
         .skip(row_offset)
         .take(visible_h)
         .map(|r| {
-            let is_cursor = r == app.cursor_row;
-            let row_bg = if is_cursor {
-                CURSOR_ROW_BG
-            } else if (r - data_start) % 2 == 0 {
-                EVEN_BG
-            } else {
-                ODD_BG
-            };
+            let is_cursor = r == cursor_row;
+            let row_bg = if is_cursor { CURSOR_ROW_BG }
+                         else if (r - data_start) % 2 == 0 { EVEN_BG }
+                         else { ODD_BG };
 
             let cells: Vec<RCell> = (col_offset..col_count)
                 .map(|c| {
-                    let txt = sheet.get(r, c).to_string();
-                    let width = col_widths.get(c).copied().unwrap_or(10) as usize;
+                    let is_active = is_cursor && c == cursor_col;
+                    let txt = if is_active && in_insert {
+                        format!("{}█", edit_buf)
+                    } else {
+                        sheet.get(r, c).to_string()
+                    };
+
+                    let width   = col_widths.get(c).copied().unwrap_or(10) as usize;
                     let display = truncate(&txt, width);
+                    let is_match = !search_q.is_empty()
+                        && sheet.get(r, c).to_string().to_lowercase().contains(&search_q);
 
-                    let is_match = !app.search_query.is_empty()
-                        && txt.to_lowercase().contains(&app.search_query);
-
-                    let style = if is_cursor && c == app.cursor_col {
-                        Style::default()
-                            .bg(ACTIVE_CELL_BG)
-                            .fg(ACTIVE_CELL_FG)
-                            .add_modifier(Modifier::BOLD)
+                    let style = if is_active && in_insert {
+                        Style::default().bg(INSERT_CELL_BG).fg(INSERT_CELL_FG).add_modifier(Modifier::BOLD)
+                    } else if is_active {
+                        Style::default().bg(ACTIVE_CELL_BG).fg(ACTIVE_CELL_FG).add_modifier(Modifier::BOLD)
                     } else if is_match {
                         Style::default().bg(row_bg).fg(MATCH_FG).add_modifier(Modifier::BOLD)
                     } else {
@@ -163,62 +175,100 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
         .map(|c| Constraint::Length(col_widths.get(c).copied().unwrap_or(10)))
         .collect();
 
-    let table = Table::new(rows, constraints)
-        .header(header_row)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER_FG)),
-        );
-
     let mut state = TableState::default();
-    frame.render_stateful_widget(table, area, &mut state);
+    frame.render_stateful_widget(
+        Table::new(rows, constraints)
+            .header(Row::new(header_cells).height(1))
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(BORDER_FG))),
+        area,
+        &mut state,
+    );
 }
 
-// ── Status bar ──────────────────────────────────────────────────────────────
+// ── Status bar ────────────────────────────────────────────────────────────────
 
 fn draw_statusbar(frame: &mut Frame, app: &App, area: Rect) {
-    let sheet = app.current_sheet();
+    let content = match app.mode {
+        Mode::Search => {
+            let hits = if app.search_hits.is_empty() {
+                " nenhum resultado".to_string()
+            } else {
+                format!(" {}/{}", app.search_idx + 1, app.search_hits.len())
+            };
+            Line::from(vec![
+                Span::styled(" / ", Style::default().fg(Color::Yellow).bg(SEARCH_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{}{}", app.search_query, hits), Style::default().fg(Color::White).bg(SEARCH_BG)),
+            ])
+        }
 
-    let content = if app.mode == Mode::Search {
-        let hits = if app.search_hits.is_empty() {
-            " nenhum resultado".to_string()
-        } else {
-            format!(" {}/{}", app.search_idx + 1, app.search_hits.len())
-        };
-        Line::from(vec![
-            Span::styled(" / ", Style::default().fg(Color::Yellow).bg(SEARCH_BG).add_modifier(Modifier::BOLD)),
-            Span::styled(
-                format!("{}{}", app.search_query, hits),
-                Style::default().fg(Color::White).bg(SEARCH_BG),
-            ),
-        ])
-    } else {
-        let col_name  = sheet.get(0, app.cursor_col).to_string();
-        let cell_val  = sheet.get(app.cursor_row, app.cursor_col).to_string();
+        Mode::Command => {
+            Line::from(vec![
+                Span::styled(" : ", Style::default().fg(Color::Yellow).bg(COMMAND_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{}█", app.command_buffer), Style::default().fg(Color::White).bg(COMMAND_BG)),
+            ])
+        }
 
-        let row_info  = format!(" Ln {}/{} ", app.cursor_row + 1, sheet.row_count());
-        let col_info  = format!(" Col {}/{} ", app.cursor_col + 1, sheet.col_count());
-        let cell_ref  = format!(" {} › {} ", col_name, cell_val);
-        let mode_info = "  [?] ajuda  [q] sair  [/] busca  [Tab] sheet ".to_string();
-        Line::from(vec![
-            Span::styled(row_info,  Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(col_info,  Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled(" │ ",     Style::default().fg(BORDER_FG).bg(STATUS_BG)),
-            Span::styled(cell_ref,  Style::default().fg(Color::White).bg(STATUS_BG).add_modifier(Modifier::BOLD)),
-            Span::styled(mode_info, Style::default().fg(BORDER_FG).bg(STATUS_BG)),
-        ])
+        Mode::Insert => {
+            let sheet    = app.current_sheet();
+            let col_name = sheet.get(0, app.cursor_col).to_string();
+            Line::from(vec![
+                Span::styled(" -- INSERT -- ", Style::default().fg(INSERT_FG).bg(STATUS_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(" │ ", Style::default().fg(BORDER_FG).bg(STATUS_BG)),
+                Span::styled(format!(" {} ", col_name), Style::default().fg(Color::Cyan).bg(STATUS_BG)),
+                Span::styled(" │ ", Style::default().fg(BORDER_FG).bg(STATUS_BG)),
+                Span::styled(format!(" {} ", app.edit_buffer), Style::default().fg(Color::White).bg(STATUS_BG)),
+                Span::styled("  [Enter] confirmar  [Esc] cancelar", Style::default().fg(BORDER_FG).bg(STATUS_BG)),
+            ])
+        }
+
+        _ => {
+            let sheet    = app.current_sheet();
+            let col_name = sheet.get(0, app.cursor_col).to_string();
+            let cell_val = sheet.get(app.cursor_row, app.cursor_col).to_string();
+
+            let mode_span = Span::styled(
+                " -- NORMAL -- ",
+                Style::default().fg(NORMAL_FG).bg(STATUS_BG),
+            );
+
+            // mensagem de status temporária (salvo, erro, etc.)
+            let msg = if let Some(ref m) = app.status_msg {
+                Span::styled(format!(" {} ", m), Style::default().fg(Color::Yellow).bg(STATUS_BG))
+            } else {
+                Span::styled(
+                    "  [?] ajuda  [i] editar  [:] comando  [/] busca  [q] sair ",
+                    Style::default().fg(BORDER_FG).bg(STATUS_BG),
+                )
+            };
+
+            Line::from(vec![
+                Span::styled(
+                    format!(" Ln {}/{} ", app.cursor_row + 1, sheet.row_count()),
+                    Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" Col {}/{} ", app.cursor_col + 1, sheet.col_count()),
+                    Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" │ ", Style::default().fg(BORDER_FG).bg(STATUS_BG)),
+                Span::styled(
+                    format!(" {} › {} ", col_name, cell_val),
+                    Style::default().fg(Color::White).bg(STATUS_BG).add_modifier(Modifier::BOLD),
+                ),
+                mode_span,
+                msg,
+            ])
+        }
     };
 
-    let status = Paragraph::new(content).style(Style::default().bg(STATUS_BG));
-    frame.render_widget(status, area);
+    frame.render_widget(Paragraph::new(content).style(Style::default().bg(STATUS_BG)), area);
 }
 
-// ── Help overlay ─────────────────────────────────────────────────────────────
+// ── Help overlay ──────────────────────────────────────────────────────────────
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect) {
-    let width  = 46u16.min(area.width.saturating_sub(4));
-    let height = 22u16.min(area.height.saturating_sub(4));
+    let width  = 52u16.min(area.width.saturating_sub(4));
+    let height = 30u16.min(area.height.saturating_sub(4));
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup = Rect::new(x, y, width, height);
@@ -228,52 +278,60 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     let help_text = vec![
         Line::from(Span::styled(" Atalhos de Teclado", Style::default().fg(HEADER_FG).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(vec![key("j / ↓"), desc("  Linha abaixo")]),
-        Line::from(vec![key("k / ↑"), desc("  Linha acima")]),
-        Line::from(vec![key("h / ←"), desc("  Coluna esquerda")]),
-        Line::from(vec![key("l / →"), desc("  Coluna direita")]),
+        Line::from(Span::styled(" Navegação", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(vec![key("j/k"), desc(" linha abaixo / acima")]),
+        Line::from(vec![key("h/l"), desc(" coluna esq / dir")]),
+        Line::from(vec![key("gg"),  desc("  primeira linha")]),
+        Line::from(vec![key("G"),   desc("   última linha")]),
+        Line::from(vec![key("0/$"), desc(" primeira / última coluna")]),
+        Line::from(vec![key("Tab"), desc(" próxima sheet")]),
         Line::from(""),
-        Line::from(vec![key("g"),     desc("      Primeira linha")]),
-        Line::from(vec![key("G"),     desc("      Última linha")]),
-        Line::from(vec![key("0"),     desc("      Primeira coluna")]),
-        Line::from(vec![key("$"),     desc("      Última coluna")]),
+        Line::from(Span::styled(" Edição", Style::default().fg(INSERT_FG).add_modifier(Modifier::BOLD))),
+        Line::from(vec![key("i"),   desc("   editar célula")]),
+        Line::from(vec![key("o/O"), desc(" nova linha abaixo / acima")]),
+        Line::from(vec![key("dd"),  desc("  deletar linha")]),
+        Line::from(vec![key("yy"),  desc("  copiar linha")]),
+        Line::from(vec![key("p/P"), desc(" colar abaixo / acima")]),
+        Line::from(vec![key("x"),   desc("   limpar célula")]),
+        Line::from(vec![key("u"),   desc("   desfazer (undo)")]),
+        Line::from(vec![key("^r"),  desc("  refazer (redo)")]),
+        Line::from(vec![key("^s"),  desc("  salvar")]),
         Line::from(""),
-        Line::from(vec![key("Tab"),   desc("    Próxima sheet")]),
-        Line::from(vec![key("S-Tab"), desc("  Sheet anterior")]),
+        Line::from(Span::styled(" Comandos", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(vec![key(":w"),  desc("  salvar")]),
+        Line::from(vec![key(":q"),  desc("  sair")]),
+        Line::from(vec![key(":wq"), desc(" salvar e sair")]),
+        Line::from(vec![key(":q!"), desc(" sair sem salvar")]),
         Line::from(""),
-        Line::from(vec![key("/"),     desc("      Buscar")]),
-        Line::from(vec![key("n / N"), desc("  Próx / Ant resultado")]),
-        Line::from(vec![key("Esc"),   desc("    Sair da busca")]),
-        Line::from(""),
-        Line::from(vec![key("?"),     desc("      Toggle ajuda")]),
-        Line::from(vec![key("q"),     desc("      Sair")]),
+        Line::from(Span::styled(" Busca", Style::default().fg(MATCH_FG).add_modifier(Modifier::BOLD))),
+        Line::from(vec![key("/"),   desc("   buscar")]),
+        Line::from(vec![key("n/N"), desc(" próx / ant resultado")]),
     ];
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(140, 180, 255)))
-        .style(Style::default().bg(Color::Rgb(15, 15, 30)));
-
-    let paragraph = Paragraph::new(help_text).block(block);
-    frame.render_widget(paragraph, popup);
+    frame.render_widget(
+        Paragraph::new(help_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Rgb(140, 180, 255)))
+                .style(Style::default().bg(Color::Rgb(15, 15, 30))),
+        ),
+        popup,
+    );
 }
 
 fn key(k: &str) -> Span<'static> {
-    Span::styled(
-        format!(" {:5}", k),
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-    )
+    Span::styled(format!(" {:5}", k), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
 }
 
 fn desc(d: &str) -> Span<'static> {
     Span::styled(d.to_string(), Style::default().fg(Color::White))
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn compute_col_widths(app: &App, available_w: usize) -> Vec<u16> {
-    let sheet     = app.current_sheet();
-    let col_count = sheet.col_count();
+    let sheet      = app.current_sheet();
+    let col_count  = sheet.col_count();
     let sample_rows = 50.min(sheet.row_count());
 
     let mut widths: Vec<usize> = (0..col_count).map(|c| {
@@ -284,8 +342,7 @@ fn compute_col_widths(app: &App, available_w: usize) -> Vec<u16> {
             .clamp(4, 30)
     }).collect();
 
-    // if all columns fit, keep them; otherwise distribute available width
-    let total: usize = widths.iter().sum::<usize>() + col_count; // +1 per separator
+    let total: usize = widths.iter().sum::<usize>() + col_count;
     if total > available_w && col_count > 0 {
         let per_col = (available_w / col_count).clamp(6, 25);
         widths = widths.iter().map(|&w| w.min(per_col)).collect();
@@ -295,8 +352,6 @@ fn compute_col_widths(app: &App, available_w: usize) -> Vec<u16> {
 }
 
 fn sync_offsets(app: &mut App, visible_h: usize, col_widths: &[u16], visible_w: usize) {
-    // vertical: keep cursor_row within [row_offset, row_offset + visible_h)
-    // row 0 is header, data rows start at 1
     let data_row = app.cursor_row.saturating_sub(1);
     if data_row < app.row_offset {
         app.row_offset = data_row;
@@ -304,7 +359,6 @@ fn sync_offsets(app: &mut App, visible_h: usize, col_widths: &[u16], visible_w: 
         app.row_offset = data_row + 1 - visible_h;
     }
 
-    // horizontal: keep cursor_col within visible window
     if app.cursor_col < app.col_offset {
         app.col_offset = app.cursor_col;
     } else {
