@@ -1,0 +1,6 @@
+/target
+
+# fixtures reais não sobem — apenas os gerados pelo build de teste
+tests/fixtures/*.xlsx
+tests/fixtures/*.xls
+tests/fixtures/*.csv
