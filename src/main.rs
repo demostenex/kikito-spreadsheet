@@ -178,18 +178,27 @@ fn handle_command(app: &mut App, ev: AppEvent, path: &Path) -> Result<(), AppErr
 fn handle_search(app: &mut App, ev: AppEvent) {
     match ev {
         AppEvent::ExitMode | AppEvent::Enter => app.exit_search(),
-        AppEvent::Char(c)   => {
-            let mut q = app.search_query.clone();
-            q.push(c);
-            app.update_search(&q);
-        }
         AppEvent::Backspace => {
             let mut q = app.search_query.clone();
             q.pop();
             app.update_search(&q);
         }
-        AppEvent::SearchNext => app.search_next(),
-        AppEvent::SearchPrev => app.search_prev(),
+        // Em modo busca n/N são literais — em Normal mode é que navegam entre resultados
+        AppEvent::SearchNext => {
+            let mut q = app.search_query.clone();
+            q.push('n');
+            app.update_search(&q);
+        }
+        AppEvent::SearchPrev => {
+            let mut q = app.search_query.clone();
+            q.push('N');
+            app.update_search(&q);
+        }
+        AppEvent::Char(c) => {
+            let mut q = app.search_query.clone();
+            q.push(c);
+            app.update_search(&q);
+        }
         _ => {}
     }
 }
