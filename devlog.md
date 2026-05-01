@@ -140,4 +140,31 @@ test result: ok. 49 passed; 0 failed; 0 ignored
 - Escritores: `CsvWriter`, `XlsxWriter`
 - Indicador `[+]` no header quando arquivo modificado
 
-<!-- Entradas futuras serão adicionadas abaixo -->
+---
+
+## 2026-05-01 — M5 edição vim + M6 README + fixes
+
+**Milestone:** M5 + M6
+**Status:** Concluído
+
+### O que foi feito
+- Edição estilo vim completa: Insert mode, Command mode, undo/redo, dd/yy/p/x/o/O
+- Writers: CsvWriter e XlsxWriter (rust_xlsxwriter)
+- `:número` navega para linha (1-indexado igual ao contador Ln x/y da status bar)
+- Fix: `n`/`N` em modo busca eram tratados como navegação em vez de caracteres literais — corrigido para adicionar ao buffer de query; em Normal mode continuam navegando entre resultados
+- Busca reutilizável: após Esc os resultados e highlights permanecem, `n`/`N` continuam ciclando
+- README.md publicado com ASCII demo (dados fictícios), instalação, atalhos, formatos e stack
+- plan.md e devlog.md atualizados com todos os milestones
+
+### Decisões tomadas
+- CPFs e dados reais removidos do README antes de publicar — dados de demonstração são sempre fictícios
+- `:número` usa a mesma numeração do contador `Ln x/y` da status bar para não confundir o usuário
+- n/N em search mode → literal char; n/N em normal mode → navegação entre hits (comportamento vim)
+
+### Resultado final
+```
+running 80 tests
+test result: ok. 80 passed; 0 failed; 0 ignored
+```
+
+Repositório: https://github.com/demostenex/kikito-spreadsheet

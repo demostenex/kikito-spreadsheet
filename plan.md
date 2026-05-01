@@ -210,13 +210,12 @@ writer::xlsx::tests::roundtrip_xlsx
 
 ---
 
-### 📋 Milestone 6 — README e Publicação
-**Pendente**
+### ✅ Milestone 6 — README e Publicação
+**Concluído em:** 2026-05-01
 
-- README.md completo: instalação, uso, screenshots, tabela de atalhos
-- `cargo clippy` sem warnings
-- `cargo test` 100% passando
-- Release binary via `cargo build --release`
+- README.md com descrição, ASCII demo, instalação, uso, tabela completa de atalhos, formatos suportados e stack
+- 80 testes passando
+- Publicado em https://github.com/demostenex/kikito-spreadsheet
 
 ---
 
